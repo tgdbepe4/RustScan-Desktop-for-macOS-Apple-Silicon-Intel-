@@ -1,8 +1,8 @@
 # RustScan Desktop for macOS (Apple Silicon & Intel)
 
-A native macOS build of the graphical desktop interface for **RustScan 2.4.1**, based on the Windows project [`badarch47/rustscan-for-windows`](https://github.com) and the **Tauri 2** framework.
+A native macOS build of the graphical desktop interface for **RustScan 2.4.1**, based on the Windows project `badarch47/rustscan-for-windows` and the **Tauri 2** framework.
 
-Since the upstream repository only provides pre-compiled binaries for Windows 10/11 and has app bundling disabled by default, this guide covers how to compile the application natively on macOS and package it as a standalone `.app` bundle.
+Since the upstream repository only provides pre-compiled binaries for Windows 10/11 and has app bundling disabled by default, this repository provides both a **ready-to-use macOS app** and a guide on how to compile it natively on macOS.
 
 ---
 
@@ -15,9 +15,19 @@ Since the upstream repository only provides pre-compiled binaries for Windows 10
 
 ---
 
-## 📋 Prerequisites
+## ⬇️ Quick Download (Pre-built App)
 
-To compile the project on macOS, you need the following tools installed:
+If you don't want to compile the app yourself, you can download the ready-to-use macOS application (`RustScan.Neon.app.zip` for Apple Silicon) directly from the **[Releases](../../releases/latest)** page:
+
+1. Download **`RustScan.Neon.app.zip`** from the latest release.
+2. Unzip the file and move **`RustScan Neon.app`** into your **`/Applications`** folder.
+3. On first launch, **Right-click → Open** to bypass macOS Gatekeeper (as the app is self-signed).
+
+---
+
+## 📋 Prerequisites (Build from Source)
+
+To compile the project yourself on macOS, you need the following tools installed:
 
 1. **Xcode Command Line Tools**
    ```bash
@@ -41,8 +51,8 @@ To compile the project on macOS, you need the following tools installed:
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com.git
-cd rustscan-for-windows
+git clone https://github.com
+cd RustScan-Desktop-for-macOS-Apple-Silicon-Intel-
 ```
 
 ### 2. Compile and bundle as `.app`
@@ -77,16 +87,16 @@ macOS enforces significantly stricter default limits on open file descriptors an
 
 ## 🙏 Credits & License
 
-* **GUI & Tauri Wrapper:** [`badarch47/rustscan-for-windows`](https://github.com)
-* **RustScan Core Engine:** [`bee-san/RustScan`](https://github.com)
+* **GUI & Tauri Wrapper:** `badarch47/rustscan-for-windows`
+* **RustScan Core Engine:** `bee-san/RustScan`
 
 ---
 
 # RustScan Desktop für macOS (Apple Silicon & Intel)
 
-Eine native macOS-Portierung der grafischen Desktop-Oberfläche für **RustScan 2.4.1**, basierend auf dem Windows-Projekt [`badarch47/rustscan-for-windows`](https://github.com) und dem **Tauri 2** Framework.
+Eine native macOS-Portierung der grafischen Desktop-Oberfläche für **RustScan 2.4.1**, basierend auf dem Windows-Projekt `badarch47/rustscan-for-windows` und dem **Tauri 2** Framework.
 
-Da das ursprüngliche Repository nur vorkompilierte Binaries für Windows 10/11 bereitstellt und das App-Bundling deaktiviert hat, beschreibt diese Anleitung, wie sich die Anwendung nativ für macOS kompilieren und als eigenständige `.app` verpacken lässt.
+Da das ursprüngliche Repository nur vorkompilierte Binaries für Windows 10/11 bereitstellt und das App-Bundling deaktiviert hat, bietet dieses Repository sowohl eine **fertig kompilierte macOS-App** als auch eine Anleitung zum Selbstbauen.
 
 ---
 
@@ -99,9 +109,19 @@ Da das ursprüngliche Repository nur vorkompilierte Binaries für Windows 10/11 
 
 ---
 
-## 📋 Voraussetzungen
+## ⬇️ Direkt-Download (Fertige App)
 
-Um das Projekt unter macOS zu kompilieren, werden folgende Werkzeuge benötigt:
+Wenn du die Anwendung nicht selbst kompilieren möchtest, kannst du die fertige macOS-App (`RustScan.Neon.app.zip` für Apple Silicon) direkt unter **[Releases](../../releases/latest)** herunterladen:
+
+1. Lade **`RustScan.Neon.app.zip`** aus dem aktuellen Release herunter.
+2. Entpacke die Datei und ziehe **`RustScan Neon.app`** in deinen **`/Applications` (Programme)**-Ordner.
+3. Öffne die App beim ersten Start per **Rechtsklick → Öffnen**, um die macOS-Sicherheitsabfrage (Gatekeeper) für unsignierte Apps zu bestätigen.
+
+---
+
+## 📋 Voraussetzungen (Selbst kompilieren)
+
+Um das Projekt selbst unter macOS zu kompilieren, werden folgende Werkzeuge benötigt:
 
 1. **Xcode Command Line Tools**
    ```bash
@@ -125,8 +145,8 @@ Um das Projekt unter macOS zu kompilieren, werden folgende Werkzeuge benötigt:
 
 ### 1. Repository klonen
 ```bash
-git clone https://github.com.git
-cd rustscan-for-windows
+git clone https://github.com
+cd RustScan-Desktop-for-macOS-Apple-Silicon-Intel-
 ```
 
 ### 2. Kompilieren und als `.app` verpacken
@@ -161,5 +181,5 @@ macOS begrenzt die Anzahl gleichzeitig offener Netzwerk-Sockets (`ulimit`) stand
 
 ## 🙏 Credits & Lizenz
 
-* **GUI & Tauri-Wrapper:** [`badarch47/rustscan-for-windows`](https://github.com)
-* **RustScan Core Engine:** [`bee-san/RustScan`](https://github.com)
+* **GUI & Tauri-Wrapper:** `badarch47/rustscan-for-windows`
+* **RustScan Core Engine:** `bee-san/RustScan`
