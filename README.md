@@ -26,8 +26,8 @@ To compile the project on macOS, you need the following tools installed:
 
 2. **Rust & Cargo**
    ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://rustup.rs | sh
-   source "\$HOME/.cargo/env"
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source "$HOME/.cargo/env"
    ```
 
 3. **Tauri CLI (Version 2)**
@@ -79,7 +79,10 @@ macOS enforces significantly stricter default limits on open file descriptors an
 
 * **GUI & Tauri Wrapper:** [`badarch47/rustscan-for-windows`](https://github.com)
 * **RustScan Core Engine:** [`bee-san/RustScan`](https://github.com)
-* # RustScan Desktop für macOS (Apple Silicon & Intel)
+
+---
+
+# RustScan Desktop für macOS (Apple Silicon & Intel)
 
 Eine native macOS-Portierung der grafischen Desktop-Oberfläche für **RustScan 2.4.1**, basierend auf dem Windows-Projekt [`badarch47/rustscan-for-windows`](https://github.com) und dem **Tauri 2** Framework.
 
@@ -107,8 +110,8 @@ Um das Projekt unter macOS zu kompilieren, werden folgende Werkzeuge benötigt:
 
 2. **Rust & Cargo**
    ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://rustup.rs | sh
-   source "\$HOME/.cargo/env"
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source "$HOME/.cargo/env"
    ```
 
 3. **Tauri CLI (Version 2)**
