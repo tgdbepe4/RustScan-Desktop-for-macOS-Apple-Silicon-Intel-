@@ -1,0 +1,201 @@
+name: CD Pipeline
+
+on:
+  push:
+    branches:
+      - "master"
+    tags:
+      - "*"
+
+# Build jobs only need to read the repository. The publish job below is the
+# only job that gets write access, and it only runs for tag pushes.
+permissions:
+  contents: read
+
+jobs:
+  build-nix:
+    env:
+      IN_PIPELINE: true
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        type: [ubuntu-x64, ubuntu-x86, armv7, aarch64]
+        include:
+          - type: ubuntu-x64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            name: x86_64-linux-rustscan
+            path: target/x86_64-unknown-linux-musl/release/rustscan
+            pkg_config_path: /usr/lib/x86_64-linux-gnu/pkgconfig
+          - type: ubuntu-x86
+            os: ubuntu-latest
+            target: i686-unknown-linux-musl
+            name: x86-linux-rustscan
+            path: target/i686-unknown-linux-musl/release/rustscan
+            pkg_config_path: /usr/lib/i686-linux-gnu/pkgconfig
+          - type: armv7
+            os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            name: armv7-linux-rustscan
+            path: target/armv7-unknown-linux-gnueabihf/release/rustscan
+            pkg_config_path: /usr/lib/x86_64-linux-gnu/pkgconfig
+          - type: aarch64
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            name: aarch64-linux-rustscan
+            path: target/aarch64-unknown-linux-gnu/release/rustscan
+            pkg_config_path: /usr/lib/x86_64-linux-gnu/pkgconfig
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cache cargo & target directories
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Build binary
+        uses: houseabsolute/actions-rust-cross@21b0f18dc621b25bfae556ff2791fca4173121e8 # v1.0.8
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          args: "--locked --release"
+          strip: true
+          toolchain: stable
+      - name: Package and upload artifacts
+        uses: houseabsolute/actions-rust-release@9e126fd5fc18f4cecf358b3909f3991ad59663dc # v1.0.1
+        with:
+          executable-name: rustscan
+          target: ${{ matrix.target }}
+          archive-name: ${{ matrix.name }}
+          changes-file: ""
+
+  build-deb:
+    needs: [build-nix]
+    runs-on: ubuntu-latest
+    env:
+      IN_PIPELINE: true
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install cargo-deb
+        run: cargo install -f cargo-deb
+      - uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
+        with:
+          packages: musl-tools # provides musl-gcc
+          version: 1.0
+      - name: Install musl toolchain
+        run: rustup target add x86_64-unknown-linux-musl
+      - name: Deb Build
+        run: cargo deb --target=x86_64-unknown-linux-musl
+      - name: Upload Deb Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: rustscan.deb
+          path: ./target/x86_64-unknown-linux-musl/debian/*
+
+  build-macos:
+    env:
+      IN_PIPELINE: true
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cache cargo & target directories
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Build binary
+        uses: houseabsolute/actions-rust-cross@21b0f18dc621b25bfae556ff2791fca4173121e8 # v1.0.8
+        with:
+          command: build
+          target: x86_64-apple-darwin
+          args: "--locked --release"
+          strip: true
+          toolchain: stable
+      - name: Package and upload artifacts
+        uses: houseabsolute/actions-rust-release@9e126fd5fc18f4cecf358b3909f3991ad59663dc # v1.0.1
+        with:
+          executable-name: rustscan
+          target: x86_64-apple-darwin
+          archive-name: x86_64-macos-rustscan
+          changes-file: ""
+
+  build-macos-aarch64:
+    env:
+      IN_PIPELINE: true
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cache cargo & target directories
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Build binary
+        uses: houseabsolute/actions-rust-cross@21b0f18dc621b25bfae556ff2791fca4173121e8 # v1.0.8
+        with:
+          command: build
+          target: aarch64-apple-darwin
+          args: "--locked --release"
+          strip: true
+          toolchain: stable
+      - name: Package and upload artifacts
+        uses: houseabsolute/actions-rust-release@9e126fd5fc18f4cecf358b3909f3991ad59663dc # v1.0.1
+        with:
+          executable-name: rustscan
+          target: aarch64-apple-darwin
+          archive-name: aarch64-macos-rustscan
+          changes-file: ""
+
+  build-windows:
+    env:
+      IN_PIPELINE: true
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        type: [windows-x64, windows-x86]
+        include:
+          - type: windows-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: x86_64-windows-rustscan
+          - type: windows-x86
+            os: windows-latest
+            target: i686-pc-windows-msvc
+            name: x86-windows-rustscan
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cache cargo & target directories
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Build binary
+        uses: houseabsolute/actions-rust-cross@21b0f18dc621b25bfae556ff2791fca4173121e8 # v1.0.8
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          args: "--locked --release"
+          strip: true
+          toolchain: stable
+      - name: Package and upload artifacts
+        uses: houseabsolute/actions-rust-release@9e126fd5fc18f4cecf358b3909f3991ad59663dc # v1.0.1
+        with:
+          executable-name: rustscan
+          target: ${{ matrix.target }}
+          archive-name: ${{ matrix.name }}
+          changes-file: ""
+
+  # Runs only for tag pushes (tags can only be created by maintainers), and
+  # only after every build job succeeded, so a release never ships partially.
+  publish:
+    if: github.ref_type == 'tag'
+    needs:
+      - build-nix
+      - build-deb
+      - build-macos
+      - build-macos-aarch64
+      - build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release / upload release assets
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+      - name: Publish artifacts to GitHub release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          fail_on_unmatched_files: true
+          files: |
+            *.deb
+            *.sha256
+            *.tar.gz
+            *.zip

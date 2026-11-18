@@ -1,0 +1,9 @@
+/target
+/src-tauri/target
+**/*.rs.bk
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.vscode/
+.idea/

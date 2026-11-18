@@ -1,0 +1,538 @@
+#![deny(clippy::all)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::doc_markdown, clippy::if_not_else, clippy::non_ascii_literal)]
+
+use rustscan::benchmark::{Benchmark, NamedTimer};
+use rustscan::input::{self, Config, Opts, ScriptsRequired};
+use rustscan::port_strategy::PortStrategy;
+use rustscan::scanner::{PortStatus, Scanner};
+use rustscan::scripts::{init_scripts, Script, ScriptFile};
+use rustscan::tui::println_safe;
+use rustscan::{detail, funny_opening, output, warning};
+
+use colorful::{Color, Colorful};
+use std::collections::HashMap;
+use std::net::IpAddr;
+use std::string::ToString;
+use std::time::Duration;
+
+use rustscan::address::parse_addresses;
+
+extern crate colorful;
+extern crate dirs;
+
+// Average value for Ubuntu
+#[cfg(unix)]
+const DEFAULT_FILE_DESCRIPTORS_LIMIT: usize = 8000;
+// Safest batch size based on experimentation
+#[cfg(unix)]
+const AVERAGE_BATCH_SIZE: usize = 3000;
+
+#[macro_use]
+extern crate log;
+
+#[cfg(not(tarpaulin_include))]
+#[allow(clippy::too_many_lines)]
+/// Faster Nmap scanning with Rust
+/// If you're looking for the actual scanning, check out the module Scanner
+fn main() {
+    #[cfg(not(unix))]
+    let _ = ansi_term::enable_ansi_support();
+
+    env_logger::init();
+    let mut benchmarks = Benchmark::init();
+    let mut rustscan_bench = NamedTimer::start("RustScan");
+
+    let mut opts: Opts = Opts::read();
+    let config = Config::read(opts.config_path.clone());
+    opts.merge(&config);
+
+    if let Err(message) = opts.validate_platform() {
+        eprintln!("error: {message}");
+        std::process::exit(2);
+    }
+
+    debug!("Main() `opts` arguments are {opts:?}");
+
+    let scripts_to_run: Vec<ScriptFile> = match init_scripts(&opts.scripts) {
+        Ok(scripts_to_run) => scripts_to_run,
+        Err(e) => {
+            warning!(
+                format!("Initiating scripts failed!\n{e}"),
+                opts.greppable,
+                opts.accessible
+            );
+            std::process::exit(1);
+        }
+    };
+
+    debug!("Scripts initialized {scripts_to_run:?}");
+
+    if !opts.greppable && !opts.accessible && !opts.no_banner {
+        print_opening(&opts);
+    }
+
+    let ips: Vec<IpAddr> = parse_addresses(&opts);
+
+    if ips.is_empty() {
+        warning!(
+            "No IPs could be resolved, aborting scan.",
+            opts.greppable,
+            opts.accessible
+        );
+        std::process::exit(1);
+    }
+
+    let batch_size = effective_batch_size(&opts);
+    debug!("Effective batch size: {batch_size}");
+
+    let mut scanner = Scanner::new(
+        &ips,
+        batch_size,
+        Duration::from_millis(opts.timeout.into()),
+        opts.tries,
+        opts.greppable,
+        PortStrategy::pick(&opts.range, opts.ports, opts.scan_order),
+        opts.accessible,
+        opts.exclude_ports.unwrap_or_default(),
+        opts.udp,
+    )
+    .with_open_port_output();
+    if opts.closed {
+        scanner = scanner.with_closed_ports();
+    }
+    if opts.interval > 0 {
+        scanner = scanner.with_interval(Duration::from_millis(opts.interval));
+    }
+    debug!("Scanner finished building: {scanner:?}");
+
+    let mut portscan_bench = NamedTimer::start("Portscan");
+    let scan_result = match run_scan(&scanner) {
+        Ok(scan_result) => scan_result,
+        Err(e) => {
+            eprintln!("error: could not start the scan: {e}");
+            std::process::exit(1);
+        }
+    };
+    portscan_bench.end();
+    benchmarks.push(portscan_bench);
+
+    let mut ports_per_ip: HashMap<IpAddr, Vec<u16>> = HashMap::new();
+    let mut closed_ports_per_ip: HashMap<IpAddr, Vec<u16>> = HashMap::new();
+
+    for status in scan_result {
+        let (map, socket) = match status {
+            PortStatus::Open(socket) => (&mut ports_per_ip, socket),
+            PortStatus::Closed(socket) => (&mut closed_ports_per_ip, socket),
+        };
+        map.entry(socket.ip()).or_default().push(socket.port());
+    }
+
+    if let Some(x) = no_open_ports_warning(&ips, &ports_per_ip, &closed_ports_per_ip, batch_size) {
+        warning!(x, opts.greppable, opts.accessible);
+    }
+
+    let mut script_bench = NamedTimer::start("Scripts");
+    for (ip, ports) in &ports_per_ip {
+        let vec_str_ports: Vec<String> = ports.iter().map(ToString::to_string).collect();
+
+        // nmap port style is 80,443. Comma separated with no spaces.
+        let ports_str = vec_str_ports.join(",");
+
+        // if option scripts is none, no script will be spawned
+        if opts.greppable || opts.scripts == ScriptsRequired::None {
+            println_safe(format_args!("{ip} -> [{ports_str}]"));
+            continue;
+        }
+        detail!("Starting Script(s)", opts.greppable, opts.accessible);
+
+        // Run all the scripts we found and parsed based on the script config file tags field.
+        for script_f in &scripts_to_run {
+            // Clone only the script being run instead of the whole list per IP.
+            let mut script_f = script_f.clone();
+            // This part allows us to add commandline arguments to the Script call_format, appending them to the end of the command.
+            if !opts.command.is_empty() {
+                let user_extra_args = &opts.command.join(" ");
+                debug!("Extra args vec {user_extra_args:?}");
+                if script_f.call_format.is_some() {
+                    let mut call_f = script_f.call_format.unwrap();
+                    call_f.push(' ');
+                    call_f.push_str(user_extra_args);
+                    output!(
+                        format!("Running script {:?} on ip {}\nDepending on the complexity of the script, results may take some time to appear.", call_f, &ip),
+                        opts.greppable,
+                        opts.accessible
+                    );
+                    debug!("Call format {call_f}");
+                    script_f.call_format = Some(call_f);
+                }
+            }
+
+            // Building the script with the arguments from the ScriptFile, and ip-ports.
+            let script = Script::build(
+                script_f.path,
+                *ip,
+                ports.clone(),
+                script_f.port,
+                script_f.ports_separator,
+                script_f.tags,
+                script_f.call_format,
+            );
+            match script.run() {
+                Ok(script_result) => {
+                    detail!(script_result.clone(), opts.greppable, opts.accessible);
+                }
+                Err(e) => {
+                    warning!(&format!("Error {e}"), opts.greppable, opts.accessible);
+                }
+            }
+        }
+    }
+
+    // Closed ports are only listed; scripts are never run against them.
+    if opts.closed {
+        println_safe(format_args!("closed ports:"));
+        for (ip, ports) in &closed_ports_per_ip {
+            let ports_str = ports
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",");
+            println_safe(format_args!("{ip} -> [{ports_str}]"));
+        }
+    }
+
+    // To use the runtime benchmark, run the process as: RUST_LOG=info ./rustscan
+    script_bench.end();
+    benchmarks.push(script_bench);
+    rustscan_bench.end();
+    benchmarks.push(rustscan_bench);
+    debug!("Benchmarks raw {benchmarks:?}");
+    info!("{}", benchmarks.summary());
+}
+
+/// Builds the hint printed when the scan found no open ports.
+///
+/// A host without open ports is normal when another host answered (a subnet
+/// sweep for one port): replies got through at this batch size and timeout,
+/// so batch size and timeout are unlikely to be the cause. The hint is printed
+/// once, and only when no host answered with an open or, under `--closed`, a
+/// closed port.
+fn no_open_ports_warning(
+    ips: &[IpAddr],
+    ports_per_ip: &HashMap<IpAddr, Vec<u16>>,
+    closed_ports_per_ip: &HashMap<IpAddr, Vec<u16>>,
+    batch_size: usize,
+) -> Option<String> {
+    if !ports_per_ip.is_empty() || !closed_ports_per_ip.is_empty() {
+        return None;
+    }
+
+    let target = match ips {
+        [ip] => format!("for {ip:?}"),
+        _ => format!("on any of the {} addresses", ips.len()),
+    };
+    Some(format!("Looks like I didn't find any open ports {}. This is usually caused by a high batch size.
+        \n*I used {} batch size, consider lowering it with {} or a comfortable number for your system.
+        \n Alternatively, increase the timeout if your ping is high. Rustscan -t 2000 for 2000 milliseconds (2s) timeout.\n",
+        target,
+        batch_size,
+        "'rustscan -b <batch_size> -a <ip address>'"))
+}
+
+/// Determines the actual batch size used by the scanner.
+///
+/// Unix systems may reduce the requested batch size according to the process
+/// file-descriptor limit. Other platforms, including Windows, use the batch
+/// size explicitly requested by the user.
+fn effective_batch_size(opts: &Opts) -> usize {
+    #[cfg(unix)]
+    {
+        infer_batch_size(opts, adjust_ulimit_size(opts))
+    }
+
+    #[cfg(not(unix))]
+    {
+        opts.batch_size
+    }
+}
+
+/// Runs the scan to completion on a current-thread Tokio runtime.
+///
+/// The scanner drives every socket from a single future and never spawns
+/// tasks, so one thread is all it can use: a current-thread runtime runs the
+/// scan, the I/O driver and the timers on the calling thread, without the
+/// worker threads and cross-thread wake-ups of a multi-threaded runtime.
+///
+/// The runtime only exists for the duration of the scan. Address resolution
+/// (blocking DNS lookups and file reads) happens before it is created, so it
+/// can never stall the scan, and scripts run after it is gone.
+fn run_scan(scanner: &Scanner) -> std::io::Result<Vec<PortStatus>> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .enable_time()
+        .build()?;
+
+    Ok(runtime.block_on(scanner.run_with_status()))
+}
+
+/// Prints the opening title of RustScan
+#[allow(clippy::items_after_statements, clippy::needless_raw_string_hashes)]
+fn print_opening(opts: &Opts) {
+    debug!("Printing opening");
+    let s = r#".----. .-. .-. .----..---.  .----. .---.   .--.  .-. .-.
+| {}  }| { } |{ {__ {_   _}{ {__  /  ___} / {} \ |  `| |
+| .-. \| {_} |.-._} } | |  .-._} }\     }/  /\  \| |\  |
+`-' `-'`-----'`----'  `-'  `----'  `---' `-'  `-'`-' `-'
+The Modern Day Port Scanner."#;
+
+    println_safe(format_args!("{}", s.gradient(Color::Green).bold()));
+    let info = r#"________________________________________
+: http://discord.skerritt.blog         :
+: https://github.com/RustScan/RustScan :
+ --------------------------------------"#;
+    println_safe(format_args!("{}", info.gradient(Color::Yellow).bold()));
+    funny_opening!();
+
+    let config_path = opts
+        .config_path
+        .clone()
+        .unwrap_or_else(input::default_config_path);
+
+    detail!(
+        format!("The config file is expected to be at {config_path:?}"),
+        opts.greppable,
+        opts.accessible
+    );
+
+    if opts.config_path.is_none() {
+        let old_config_path = input::old_default_config_path();
+        detail!(
+            format!(
+                "For backwards compatibility, the config file may also be at {old_config_path:?}"
+            ),
+            opts.greppable,
+            opts.accessible
+        );
+    }
+}
+
+#[cfg(unix)]
+fn adjust_ulimit_size(opts: &Opts) -> usize {
+    use rlimit::Resource;
+    use std::convert::TryInto;
+
+    if let Some(limit) = opts.ulimit {
+        let limit = limit as u64;
+        if Resource::NOFILE.set(limit, limit).is_ok() {
+            detail!(
+                format!("Automatically increasing ulimit value to {limit}."),
+                opts.greppable,
+                opts.accessible
+            );
+        } else {
+            warning!(
+                "ERROR. Failed to set ulimit value.",
+                opts.greppable,
+                opts.accessible
+            );
+        }
+    }
+
+    let (soft, _) = Resource::NOFILE.get().unwrap();
+    // On 32-bit targets the soft limit (e.g. RLIM_INFINITY) may not fit in a
+    // usize. Fall back to the conservative default rather than usize::MAX,
+    // which would skip every batch-size adjustment in infer_batch_size.
+    soft.try_into().unwrap_or(DEFAULT_FILE_DESCRIPTORS_LIMIT)
+}
+
+#[cfg(unix)]
+fn infer_batch_size(opts: &Opts, ulimit: usize) -> usize {
+    let mut batch_size = opts.batch_size;
+
+    // Adjust the batch size when the ulimit value is lower than the desired batch size
+    if ulimit < batch_size {
+        warning!("File limit is lower than default batch size. Consider upping with --ulimit. May cause harm to sensitive servers",
+            opts.greppable, opts.accessible
+        );
+
+        // When the OS supports high file limits like 8000, but the user
+        // selected a batch size higher than this we should reduce it to
+        // a lower number.
+        if ulimit < AVERAGE_BATCH_SIZE {
+            // ulimit is smaller than average batch size
+            // user must have very small ulimit
+            // decrease batch size to half of ulimit
+            warning!("Your file limit is very small, which negatively impacts RustScan's speed. Use the Docker image, or up the Ulimit with '--ulimit 5000'. ", opts.greppable, opts.accessible);
+            info!("Halving batch_size because ulimit is smaller than average batch size");
+            batch_size = ulimit / 2;
+        } else if ulimit > DEFAULT_FILE_DESCRIPTORS_LIMIT {
+            info!("Batch size is now average batch size");
+            batch_size = AVERAGE_BATCH_SIZE;
+        } else {
+            batch_size = ulimit - 100;
+        }
+    }
+    // When the ulimit is higher than the batch size let the user know that the
+    // batch size can be increased unless they specified the ulimit themselves.
+    else if ulimit + 2 > batch_size && (opts.ulimit.is_none()) {
+        detail!(format!("File limit higher than batch size. Can increase speed by increasing batch size '-b {}'.", ulimit - 100),
+        opts.greppable, opts.accessible);
+    }
+
+    batch_size
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(windows)]
+    use super::effective_batch_size;
+    #[cfg(unix)]
+    use super::{adjust_ulimit_size, infer_batch_size};
+    use super::{no_open_ports_warning, print_opening, Opts};
+    use std::collections::HashMap;
+    use std::net::IpAddr;
+
+    fn hosts(n: u8) -> Vec<IpAddr> {
+        (1..=n).map(|i| IpAddr::from([192, 0, 2, i])).collect()
+    }
+
+    #[test]
+    fn no_open_ports_silent_when_another_host_answered() {
+        // Sweeping a subnet for one port: one host has it open, the rest do not.
+        let ips = hosts(254);
+        let ports_per_ip = HashMap::from([(ips[0], vec![22])]);
+
+        assert!(no_open_ports_warning(&ips, &ports_per_ip, &HashMap::new(), 4500).is_none());
+    }
+
+    #[test]
+    fn no_open_ports_silent_when_a_host_answered_closed() {
+        // With --closed, a refused connection also proves replies get through.
+        let ips = hosts(254);
+        let closed_ports_per_ip = HashMap::from([(ips[0], vec![443])]);
+
+        assert!(no_open_ports_warning(&ips, &HashMap::new(), &closed_ports_per_ip, 4500).is_none());
+    }
+
+    #[test]
+    fn no_open_ports_warns_once_when_nothing_found() {
+        let warning = no_open_ports_warning(&hosts(254), &HashMap::new(), &HashMap::new(), 4500);
+
+        let warning = warning.expect("one hint when nothing was found");
+        assert!(warning.contains("on any of the 254 addresses."));
+        assert!(warning.contains("4500 batch size"));
+    }
+
+    #[test]
+    fn no_open_ports_names_the_single_host() {
+        let warning = no_open_ports_warning(&hosts(1), &HashMap::new(), &HashMap::new(), 4500);
+
+        let warning = warning.expect("one hint for the single host");
+        assert!(warning.contains("for 192.0.2.1."));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn batch_size_lowered() {
+        let opts = Opts {
+            batch_size: 50_000,
+            ..Default::default()
+        };
+        let batch_size = infer_batch_size(&opts, 120);
+
+        assert!(batch_size < opts.batch_size);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn batch_size_lowered_average_size() {
+        let opts = Opts {
+            batch_size: 50_000,
+            ..Default::default()
+        };
+        let batch_size = infer_batch_size(&opts, 9_000);
+
+        assert_eq!(batch_size, 3_000);
+    }
+    #[test]
+    #[cfg(unix)]
+    fn batch_size_equals_ulimit_lowered() {
+        // because ulimit and batch size are same size, batch size is lowered
+        // to ULIMIT - 100
+        let opts = Opts {
+            batch_size: 50_000,
+            ..Default::default()
+        };
+        let batch_size = infer_batch_size(&opts, 5_000);
+
+        assert_eq!(batch_size, 4_900);
+    }
+    #[test]
+    #[cfg(unix)]
+    fn batch_size_adjusted_2000() {
+        // ulimit == batch_size
+        let opts = Opts {
+            batch_size: 50_000,
+            ulimit: Some(2_000),
+            ..Default::default()
+        };
+        let batch_size = adjust_ulimit_size(&opts);
+
+        assert_eq!(batch_size, 2_000);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_high_ulimit_no_greppable_mode() {
+        let opts = Opts {
+            batch_size: 10,
+            greppable: false,
+            ..Default::default()
+        };
+
+        let batch_size = infer_batch_size(&opts, 1_000_000);
+
+        assert_eq!(batch_size, opts.batch_size);
+    }
+
+    #[test]
+    fn test_print_opening_no_panic() {
+        let opts = Opts::default();
+        // print opening should not panic
+        print_opening(&opts);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_batch_size_uses_requested_value() {
+        let opts = Opts {
+            batch_size: 50,
+            ..Default::default()
+        };
+
+        assert_eq!(effective_batch_size(&opts), 50);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_batch_size_preserves_large_requested_value() {
+        let opts = Opts {
+            batch_size: 12_345,
+            ..Default::default()
+        };
+
+        assert_eq!(effective_batch_size(&opts), 12_345);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_batch_size_preserves_single_connection() {
+        let opts = Opts {
+            batch_size: 1,
+            ..Default::default()
+        };
+
+        assert_eq!(effective_batch_size(&opts), 1);
+    }
+}

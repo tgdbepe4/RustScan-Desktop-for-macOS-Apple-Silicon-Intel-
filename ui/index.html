@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RUSTSCAN // NEON GRID</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/chakra-petch-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/share-tech-mono-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/neon.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="city" aria-hidden="true"></canvas>
+  <div class="film" aria-hidden="true"></div>
+  <div class="scanlines" aria-hidden="true"></div>
+
+  <header class="titlebar" data-tauri-drag-region>
+    <div class="brand" data-tauri-drag-region>
+      <span class="brand-mark" aria-hidden="true"><i>R</i></span>
+      <span class="brand-name">RUSTSCAN</span>
+      <span class="brand-slash">//</span>
+      <span class="brand-sub">NEON GRID</span>
+      <span class="brand-build">v2.4.1</span>
+    </div>
+    <div class="titlebar-meta" data-tauri-drag-region>
+      <span class="tb-item"><i class="dot"></i> ENGINE ONLINE</span>
+      <span class="tb-item">WIN10 / x64</span>
+      <span class="tb-item" id="clock">00:00:00</span>
+    </div>
+    <div class="win-btns">
+      <button class="win-btn" id="win-min" title="最小化" aria-label="最小化">&#8212;</button>
+      <button class="win-btn" id="win-max" title="最大化" aria-label="最大化">&#9633;</button>
+      <button class="win-btn win-close" id="win-close" title="关闭" aria-label="关闭">&#10005;</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <aside class="rail">
+      <div class="rail-glow" aria-hidden="true"></div>
+      <div class="rail-head">
+        <div class="eyebrow"><span>01</span> // TARGET VECTOR</div>
+        <h1 class="hero-title">
+          <span class="line">PORT</span>
+          <span class="line outline">RECON</span>
+        </h1>
+        <p class="hero-sub">异步端口侦测终端 <b>·</b> RUST ENGINE <b>·</b> 65535 PORTS</p>
+        <div class="vertical-tag" aria-hidden="true">NC-2077 / SECTOR 07</div>
+      </div>
+
+      <form id="scan-form" autocomplete="off" novalidate>
+        <div class="field">
+          <div class="field-head">
+            <label for="targets">TARGETS</label>
+            <span class="field-meta" id="target-meta">IP / CIDR / HOSTNAME</span>
+          </div>
+          <div class="target-wrap">
+            <textarea id="targets" name="targets" rows="4" spellcheck="false"
+              placeholder="10.0.0.1&#10;192.168.1.0/24&#10;scanme.example.com"></textarea>
+            <span class="corner tl"></span><span class="corner tr"></span>
+            <span class="corner bl"></span><span class="corner br"></span>
+          </div>
+          <div class="quick-row">
+            <button type="button" class="mini-btn" id="btn-file">FILE</button>
+            <button type="button" class="mini-btn" id="btn-paste">PASTE</button>
+            <button type="button" class="mini-btn" id="btn-local">LOCALHOST</button>
+            <button type="button" class="mini-btn danger" id="btn-clear">CLEAR</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-head">
+            <span class="label">PORT VECTOR</span>
+            <span class="field-meta" id="port-meta">100 PORTS</span>
+          </div>
+          <div class="segmented" role="radiogroup" aria-label="端口预设">
+            <label><input type="radio" name="preset" value="top200" checked><span>TOP 100</span></label>
+            <label><input type="radio" name="preset" value="quick"><span>1K</span></label>
+            <label><input type="radio" name="preset" value="full"><span>FULL</span></label>
+            <label><input type="radio" name="preset" value="custom"><span>CUSTOM</span></label>
+          </div>
+          <div class="port-custom" id="custom-wrap" aria-hidden="true">
+            <input id="ports" name="ports" type="text" spellcheck="false"
+              placeholder="1-1024, 3306, 8000-8100" disabled>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-head">
+            <span class="label">CONCURRENCY</span>
+            <span class="field-meta">TUNE THE SWEEP</span>
+          </div>
+          <div class="tri-grid">
+            <label class="num-field">
+              <span>BATCH</span>
+              <input id="batch" type="number" min="1" max="20000" step="100" value="3000">
+            </label>
+            <label class="num-field">
+              <span>TIMEOUT <em>ms</em></span>
+              <input id="timeout" type="number" min="10" max="10000" step="10" value="180">
+            </label>
+            <label class="num-field">
+              <span>TRIES</span>
+              <input id="tries" type="number" min="1" max="10" step="1" value="1">
+            </label>
+          </div>
+        </div>
+
+        <details class="advanced">
+          <summary><span>ADVANCED PARAMETERS</span><i>+</i></summary>
+          <div class="adv-body">
+            <label class="num-field wide">
+              <span>EXCLUDE PORTS</span>
+              <input id="exclude" type="text" spellcheck="false" placeholder="9100, 9200-9300">
+            </label>
+            <label class="num-field">
+              <span>SCAN ORDER</span>
+              <select id="order">
+                <option value="random" selected>RANDOM</option>
+                <option value="serial">SERIAL</option>
+              </select>
+            </label>
+            <label class="num-field">
+              <span>INTERVAL <em>ms</em></span>
+              <input id="interval" type="number" min="0" max="60000" step="10" value="0">
+            </label>
+            <label class="num-field">
+              <span>MAX HOSTS</span>
+              <input id="maxhosts" type="number" min="1" max="4096" step="1" value="1024">
+            </label>
+            <div class="switch-row">
+              <label class="switch">
+                <input type="checkbox" id="udp">
+                <span class="switch-track"><i></i></span>
+                <span class="switch-label">UDP SCAN</span>
+              </label>
+              <label class="switch">
+                <input type="checkbox" id="probe" checked>
+                <span class="switch-track"><i></i></span>
+                <span class="switch-label">BANNER GRAB</span>
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <div class="action-row">
+          <button type="submit" class="scan-btn" id="btn-scan">
+            <span class="scan-btn-label">INITIATE SCAN</span>
+            <span class="scan-btn-hint">CTRL + ENTER</span>
+          </button>
+          <button type="button" class="abort-btn" id="btn-abort" disabled>
+            <span>ABORT</span>
+          </button>
+        </div>
+      </form>
+
+      <div class="rail-foot">
+        <div class="foot-line"><span class="dot" id="foot-dot"></span><span id="foot-state">SYSTEM READY</span></div>
+        <div class="barcode" aria-hidden="true"></div>
+        <div class="foot-line dim"><span>BUILD 2.4.1-NEON</span><span>GPL-3.0</span></div>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <div class="statusbar">
+        <div class="phase-box">
+          <span class="dot" id="phase-dot"></span>
+          <span class="phase" id="phase">STANDBY</span>
+          <span class="phase-sub" id="phase-sub">NO ACTIVE SWEEP</span>
+        </div>
+        <div class="metrics">
+          <div class="metric"><span>HOSTS</span><b id="m-hosts">0</b></div>
+          <div class="metric"><span>PORTS</span><b id="m-ports">0</b></div>
+          <div class="metric"><span>OPEN</span><b class="acid" id="m-open">0</b></div>
+          <div class="metric"><span>RATE</span><b id="m-rate">0<em>pps</em></b></div>
+          <div class="metric"><span>ELAPSED</span><b id="m-time">00:00</b></div>
+        </div>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress">
+          <i id="bar"></i>
+          <span class="tick t1"></span><span class="tick t2"></span><span class="tick t3"></span><span class="tick t4"></span>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab-list" role="tablist">
+          <button class="tab active" data-tab="results" role="tab" aria-selected="true">RESULTS <b id="tab-count">0</b></button>
+          <button class="tab" data-tab="console" role="tab" aria-selected="false">CONSOLE</button>
+          <button class="tab" data-tab="summary" role="tab" aria-selected="false">TELEMETRY</button>
+        </div>
+        <div class="tab-tools">
+          <div class="search">
+            <span aria-hidden="true">&#8981;</span>
+            <input id="filter" type="search" placeholder="FILTER HOST / PORT / SERVICE" spellcheck="false" aria-label="过滤结果">
+          </div>
+          <button class="mini-btn" id="btn-csv">CSV</button>
+          <button class="mini-btn" id="btn-json">JSON</button>
+        </div>
+      </div>
+
+      <div class="panels">
+        <section class="panel tab-panel active" id="panel-results" role="tabpanel">
+          <div class="table-head">
+            <span class="col-port">PORT</span>
+            <span class="col-proto">PROTO</span>
+            <span class="col-service">SERVICE</span>
+            <span class="col-host">HOST</span>
+            <span class="col-lat">LAT</span>
+            <span class="col-banner">BANNER / FINGERPRINT</span>
+          </div>
+          <div class="table-scroll" id="table-scroll">
+            <table class="result-table" id="result-table">
+              <colgroup>
+                <col style="width:78px"><col style="width:70px"><col style="width:112px">
+                <col style="width:190px"><col style="width:74px"><col>
+              </colgroup>
+              <tbody id="result-body"></tbody>
+            </table>
+            <div class="empty" id="empty-state">
+              <svg class="empty-art" viewBox="0 0 320 180" aria-hidden="true">
+                <g fill="none" stroke="currentColor">
+                  <path class="wire" d="M6 150h46l18-28h52l14-34h38l20 24h44l16-42h66"/>
+                  <path class="wire dim" d="M24 24h54l20 30h60l16 18h52l18-22h52"/>
+                  <circle cx="52" cy="150" r="3"/><circle cx="138" cy="122" r="3"/>
+                  <circle cx="190" cy="88" r="3"/><circle cx="232" cy="112" r="3"/>
+                  <circle cx="294" cy="70" r="3"/><circle cx="78" cy="24" r="3"/>
+                </g>
+                <text x="160" y="60" text-anchor="middle" class="empty-code">NO SIGNAL</text>
+              </svg>
+              <div class="empty-title">AWAITING TARGET</div>
+              <div class="empty-sub">输入目标向量，启动异步端口侦测</div>
+              <div class="empty-hint">[ CTRL + ENTER ] TO INITIATE</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel tab-panel" id="panel-console" role="tabpanel">
+          <div class="console-head">
+            <span>LIVE TELEMETRY STREAM</span>
+            <div class="console-actions">
+              <button class="mini-btn" id="btn-copy-log">COPY</button>
+              <button class="mini-btn" id="btn-clear-log">CLEAR</button>
+            </div>
+          </div>
+          <div class="console" id="console" tabindex="0"></div>
+        </section>
+
+        <section class="panel tab-panel" id="panel-summary" role="tabpanel">
+          <div class="telemetry">
+            <div class="stat-cards">
+              <div class="stat-card">
+                <span class="stat-label">OPEN PORTS</span>
+                <b class="stat-num acid" id="s-open">0</b>
+                <span class="stat-foot">ACROSS <em id="s-hosts">0</em> HOSTS</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">SWEEP TIME</span>
+                <b class="stat-num" id="s-time">00:00</b>
+                <span class="stat-foot">WALL CLOCK</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">THROUGHPUT</span>
+                <b class="stat-num" id="s-rate">0</b>
+                <span class="stat-foot">SOCKETS / SEC</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">COVERAGE</span>
+                <b class="stat-num" id="s-cov">0<em>%</em></b>
+                <span class="stat-foot"><em id="s-scanned">0</em> SOCKETS PROBED</span>
+              </div>
+            </div>
+            <div class="tele-grid">
+              <div class="tele-block">
+                <div class="tele-head"><span>02</span> SERVICE DISTRIBUTION</div>
+                <div class="svc-bars" id="svc-bars"><p class="tele-empty">NO DATA // RUN A SWEEP</p></div>
+              </div>
+              <div class="tele-block">
+                <div class="tele-head"><span>03</span> ACTIVE HOSTS</div>
+                <div class="host-list" id="host-list"><p class="tele-empty">NO DATA // RUN A SWEEP</p></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <footer class="marquee" aria-hidden="true">
+        <div class="marquee-track">
+          <span>RUSTSCAN NEON GRID // ASYNC PORT RECON // 65535 PORT SPACE // BANNER FINGERPRINT // UDP + TCP // ZERO TELEMETRY // NIGHT CITY BUILD //</span>
+          <span>RUSTSCAN NEON GRID // ASYNC PORT RECON // 65535 PORT SPACE // BANNER FINGERPRINT // UDP + TCP // ZERO TELEMETRY // NIGHT CITY BUILD //</span>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <div class="toast-stack" id="toasts" aria-live="polite"></div>
+</div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

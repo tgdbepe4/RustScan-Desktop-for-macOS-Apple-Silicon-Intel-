@@ -1,0 +1,68 @@
+//! This crate exposes the internal functionality of the
+//! [RustScan](https://rustscan.github.io/RustScan) port scanner.
+//!
+//! ## Example: perform a scan against localhost
+//!
+//! The core scanning behaviour is managed by
+//! [`Scanner`](crate::scanner::Scanner) which in turn requires a
+//! [`PortStrategy`](crate::port_strategy::PortStrategy).
+//!
+//! The scanner is asynchronous and runs on [Tokio](https://docs.rs/tokio):
+//! await [`Scanner::run`](crate::scanner::Scanner::run) from a Tokio runtime
+//! with the I/O and time drivers enabled. It never spawns tasks, so a
+//! current-thread runtime is enough (see [`Scanner`](crate::scanner::Scanner)
+//! for details).
+//!
+//! This example is compiled but never executed by the test suite.
+//!
+//! ```no_run
+//! use std::{net::IpAddr, time::Duration};
+//!
+//! use rustscan::input::{PortRanges, ScanOrder};
+//! use rustscan::port_strategy::PortStrategy;
+//! use rustscan::scanner::Scanner;
+//!
+//! fn main() {
+//!     let addrs = vec!["127.0.0.1".parse::<IpAddr>().unwrap()];
+//!     let range = PortRanges(vec![(1, 1_000)]);
+//!     let strategy = PortStrategy::pick(&Some(range), None, ScanOrder::Random); // can be serial, random or manual https://github.com/RustScan/RustScan/blob/master/src/port_strategy/mod.rs
+//!     let scanner = Scanner::new(
+//!         &addrs, // the addresses to scan
+//!         10, // batch_size is how many ports at a time should be scanned
+//!         Duration::from_millis(100), //T imeout is the time RustScan should wait before declaring a port closed. As datatype Duration.
+//!         1, // Tries, how many retries should RustScan do?
+//!         true, // greppable is whether or not RustScan should print things, or wait until the end to print only the ip
+//!         strategy, // the port strategy used
+//!         true, // accessible, should the output be A11Y compliant?
+//!         vec![9000], // What ports should RustScan exclude?
+//!         false, // is this a UDP scan?
+//!     );
+//!
+//!     // Inside an async context (e.g. `#[tokio::main]`) this is simply
+//!     // `scanner.run().await`.
+//!     let runtime = tokio::runtime::Builder::new_current_thread()
+//!         .enable_all()
+//!         .build()
+//!         .unwrap();
+//!     let scan_result = runtime.block_on(scanner.run());
+//!
+//!     println!("{:?}", scan_result);
+//! }
+//! ```
+#![allow(clippy::needless_doctest_main)]
+
+pub mod tui;
+
+pub mod input;
+
+pub mod scanner;
+
+pub mod port_strategy;
+
+pub mod benchmark;
+
+pub mod scripts;
+
+pub mod address;
+
+pub mod generated;

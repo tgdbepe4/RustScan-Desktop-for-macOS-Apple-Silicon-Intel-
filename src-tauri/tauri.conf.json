@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "RustScan Neon",
+  "version": "2.4.1",
+  "identifier": "dev.rustscan.neon",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "RUSTSCAN // NEON GRID",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1120,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": false,
+        "center": true,
+        "theme": "Dark",
+        "shadow": true,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
+    "publisher": "RustScan Neon",
+    "shortDescription": "Async port reconnaissance terminal",
+    "longDescription": "RustScan Neon Grid is a native Windows desktop front-end for the RustScan asynchronous port scanner."
+  }
+}
