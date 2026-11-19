@@ -37,7 +37,7 @@ To compile the project yourself on macOS, you need the following tools installed
 2. **Rust & Cargo**
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   source "$HOME/.cargo/env"
+   source "\$HOME/.cargo/env"
    ```
 
 3. **Tauri CLI (Version 2)**
@@ -81,7 +81,12 @@ cargo tauri build --bundles app
 
 macOS enforces significantly stricter default limits on open file descriptors and network sockets (`ulimit`) compared to Linux or Windows (typically `256` to `1024`).
 
-* **Batch Size:** Set the **Batch Size between `500` and `1000`** in the UI. Higher values may cause macOS to drop packets or throw socket errors during fast scans.
+* **Pre-configured macOS Defaults:** Both the UI and Rust backend default to **Batch Size `1000`** and **Timeout `1000 ms`** to prevent dropped packets and false negatives on macOS Wi-Fi/LAN connections.
+* **Socket Limit Guard (`8,000,000` max):** Scanning an entire `/24` subnet (`254` hosts) with `FULL` (`65,535` ports) generates ~16.6M sockets and triggers the built-in safety block. Use **`TOP 100`** or **`1K`** for `/24` network sweeps, and reserve **`FULL`** for single IP targets.
+* **Raise System `ulimit` (Optional):** For heavy subnet sweeps, raise the macOS file descriptor limit via Terminal before launching the app:
+  ```bash
+  sudo launchctl limit maxfiles 65536 200000
+  ```
 
 ---
 
@@ -131,7 +136,7 @@ Um das Projekt selbst unter macOS zu kompilieren, werden folgende Werkzeuge ben�
 2. **Rust & Cargo**
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   source "$HOME/.cargo/env"
+   source "\$HOME/.cargo/env"
    ```
 
 3. **Tauri CLI (Version 2)**
@@ -173,9 +178,14 @@ cargo tauri build --bundles app
 
 ## ⚡ Empfohlene Einstellungen für macOS
 
-macOS begrenzt die Anzahl gleichzeitig offener Netzwerk-Sockets (`ulimit`) standardmässig deutlich strenger als Linux oder Windows (oft auf `256` bis `1024`). 
+macOS begrenzt die Anzahl gleichzeitig offener Netzwerk-Sockets (`ulimit`) standardmässig deutlich strenger als Linux oder Windows (oft auf `256` bis `1024`).
 
-* **Batch Size:** Stelle in der Oberfläche eine **Batch Size zwischen `500` und `1000`** ein. Höhere Werte können unter macOS dazu führen, dass offene Ports übersehen werden oder Socket-Fehler auftreten.
+* **Vorkonfigurierte macOS-Standardwerte:** Sowohl die Oberfläche als auch das Rust-Backend starten standardmässig mit **Batch Size `1000`** und **Timeout `1000 ms`**, um Paketverluste unter macOS (WLAN/LAN) zu vermeiden.
+* **Socket-Schutzlimit (`8,000,000` max.):** Ein komplettes `/24`-Subnetz (`254` Hosts) mit `FULL` (`65.535` Ports) erzeugt ~16,6 Mio. Sockets und wird vom eingebauten Schutzmechanismus blockiert. Nutze **`TOP 100`** oder **`1K`** für ganze `/24`-Netzwerke und **`FULL`** nur für einzelne IP-Adressen.
+* **Systemweites `ulimit` erhöhen (Optional):** Für umfangreiche Netzwerk-Sweeps kannst du das macOS-Limit vor dem Start im Terminal anheben:
+  ```bash
+  sudo launchctl limit maxfiles 65536 200000
+  ```
 
 ---
 
