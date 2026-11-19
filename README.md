@@ -37,7 +37,7 @@ To compile the project yourself on macOS, you need the following tools installed
 2. **Rust & Cargo**
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   source "\$HOME/.cargo/env"
+   source "$HOME/.cargo/env"
    ```
 
 3. **Tauri CLI (Version 2)**
@@ -136,7 +136,7 @@ Um das Projekt selbst unter macOS zu kompilieren, werden folgende Werkzeuge ben√
 2. **Rust & Cargo**
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   source "\$HOME/.cargo/env"
+   source "$HOME/.cargo/env"
    ```
 
 3. **Tauri CLI (Version 2)**
