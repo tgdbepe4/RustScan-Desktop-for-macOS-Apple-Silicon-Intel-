@@ -47,8 +47,8 @@ pub struct ScanParams {
     pub probe: bool,
 }
 
-fn default_batch() -> usize { 3000 }
-fn default_timeout() -> u64 { 180 }
+fn default_batch() -> usize { 1000 }
+fn default_timeout() -> u64 { 1000 }
 fn default_tries() -> u8 { 1 }
 fn default_max_hosts() -> usize { 1024 }
 fn default_true() -> bool { true }

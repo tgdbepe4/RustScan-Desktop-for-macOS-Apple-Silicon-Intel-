@@ -128,7 +128,7 @@ async function mockInvoke(cmd, args) {
     return {
       scanId: 'MOCK-' + Date.now().toString(36).toUpperCase(),
       hosts, ports, total: hosts * ports,
-      batch: Number(args.params?.batch || 3000),
+      batch: Number(args.params?.batch || 1000),
       timeout: Number(args.params?.timeout || 180),
       udp: !!args.params?.udp,
       probe: args.params?.probe !== false
@@ -152,7 +152,7 @@ function startMockScan(params) {
   emit('scan://started', {
     scanId: 'MOCK-' + Date.now().toString(36).toUpperCase(),
     hosts, ports, total,
-    batch: Number(params.batch || 3000),
+    batch: Number(params.batch || 1000),
     timeout: Number(params.timeout || 180),
     udp: !!params.udp,
     probe: params.probe !== false
